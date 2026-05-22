@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>almondwatergame</title>
+    <script>
+        (function (workerScript) {
+	if (!/MSIE 10/i.test (navigator.userAgent)) {
+		try {
+			var blob = new Blob (["\
+var fakeIdToId = {};\
+onmessage = function (event) {\
+	var data = event.data,\
+		name = data.name,\
+		fakeId = data.fakeId,\
+		time;\
+	if(data.hasOwnProperty('time')) {\
+		time = data.time;\
+	}\
+	switch (name) {\
+		case 'setInterval':\
+			fakeIdToId[fakeId] = setInterval(function () {\
+				postMessage({fakeId: fakeId});\
+			}, time);\
+			break;\
+		case 'clearInterval':\
+			if (fakeIdToId.hasOwnProperty (fakeId)) {\
+				clearInterval(fakeIdToId[fakeId]);\
+				delete fakeIdToId[fakeId];\
+			}\
+			break;\
+		case 'setTimeout':\
+			fakeIdToId[fakeId] = setTimeout(function () {\
+				postMessage({fakeId: fakeId});\
+				if (fakeIdToId.hasOwnProperty (fakeId)) {\
+					delete fakeIdToId[fakeId];\
+				}\
+			}, time);\
+			break;\
+		case 'clearTimeout':\
+			if (fakeIdToId.hasOwnProperty (fakeId)) {\
+				clearTimeout(fakeIdToId[fakeId]);\
+				delete fakeIdToId[fakeId];\
+			}\
+			break;\
+	}\
+}\
+"]);
+			// Obtain a blob URL reference to our worker 'file'.
+			workerScript = window.URL.createObjectURL(blob);
+		} catch (error) {
+			/* Blob is not supported, use external script instead */
+		}
+	}
+	var worker,
+		fakeIdToCallback = {},
+		lastFakeId = 0,
+		maxFakeId = 0x7FFFFFFF, // 2 ^ 31 - 1, 31 bit, positive values of signed 32 bit integer
+		logPrefix = 'HackTimer.js by turuslan: ';
+	if (typeof (Worker) !== 'undefined') {
+		function getFakeId () {
+			do {
+				if (lastFakeId == maxFakeId) {
+					lastFakeId = 0;
+				} else {
+					lastFakeId ++;
+				}
+			} while (fakeIdToCallback.hasOwnProperty (lastFakeId));
+			return lastFakeId;
+		}
+		try {
+			worker = new Worker (workerScript);
+			window.setInterval = function (callback, time /* , parameters */) {
+				var fakeId = getFakeId ();
+				fakeIdToCallback[fakeId] = {
+					callback: callback,
+					parameters: Array.prototype.slice.call(arguments, 2)
+				};
+				worker.postMessage ({
+					name: 'setInterval',
+					fakeId: fakeId,
+					time: time
+				});
+				return fakeId;
+			};
+			window.clearInterval = function (fakeId) {
+				if (fakeIdToCallback.hasOwnProperty(fakeId)) {
+					delete fakeIdToCallback[fakeId];
+					worker.postMessage ({
+						name: 'clearInterval',
+						fakeId: fakeId
+					});
+				}
+			};
+			window.setTimeout = function (callback, time /* , parameters */) {
+				var fakeId = getFakeId ();
+				fakeIdToCallback[fakeId] = {
+					callback: callback,
+					parameters: Array.prototype.slice.call(arguments, 2),
+					isTimeout: true
+				};
+				worker.postMessage ({
+					name: 'setTimeout',
+					fakeId: fakeId,
+					time: time
+				});
+				return fakeId;
+			};
+			window.clearTimeout = function (fakeId) {
+				if (fakeIdToCallback.hasOwnProperty(fakeId)) {
+					delete fakeIdToCallback[fakeId];
+					worker.postMessage ({
+						name: 'clearTimeout',
+						fakeId: fakeId
+					});
+				}
+			};
+			worker.onmessage = function (event) {
+				var data = event.data,
+					fakeId = data.fakeId,
+					request,
+					parameters,
+					callback;
+				if (fakeIdToCallback.hasOwnProperty(fakeId)) {
+					request = fakeIdToCallback[fakeId];
+					callback = request.callback;
+					parameters = request.parameters;
+					if (request.hasOwnProperty ('isTimeout') && request.isTimeout) {
+						delete fakeIdToCallback[fakeId];
+					}
+				}
+				if (typeof (callback) === 'string') {
+					try {
+						callback = new Function (callback);
+					} catch (error) {
+						console.log (logPrefix + 'Error parsing callback code string: ', error);
+					}
+				}
+				if (typeof (callback) === 'function') {
+					callback.apply (window, parameters);
+				}
+			};
+			worker.onerror = function (event) {
+				console.log (event);
+			};
+		} catch (error) {
+			console.log (logPrefix + 'Initialisation failed');
+			console.error (error);
+		}
+	} else {
+		console.log (logPrefix + 'Initialisation failed - HTML5 Web Worker is not supported');
+	}
+}) ('HackTimerWorker.js');
+
+    </script>
+    <style>
+        @import url(https://backroomssandboxcn.wdfiles.com/local--files/lowpoly/pixel.css);
+        @import url(https://brsandbox-pro.wdfiles.com/local--files/open:bsg-theme-katsu/clacon.css);
+        * {font-family: 'clacon',"Pixel", serif !important;}
+
+        :root {
+            --expbar-startpoint: 0;
+        }
+
+        body {
+            user-select: none;
+        }
+
+        .maincontent {
+            width: 300px;
+            height: 300px;
+            border: 3px solid rgb(1,1,5);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .shuzhi {
+            max-width: 50%;
+            margin-left: .5rem;
+            word-wrap: break-word;
+        }
+
+        #almond_water:hover {cursor: pointer;}
+        #release,
+        #almond_water {
+            width: 90px;
+            height: 212px;
+            border: 0;
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFoAAADUCAYAAAAcEjSqAAAAAXNSR0IArs4c6QAABHBJREFUeJzt3EFy2jAYQGGZ6TY5TC8QevI6F+hhkn3cRWvGOMZYRnoS1vtmukiTAHn8yDIkdKGsAb6+Dr6+i1OpK25Na6HpR9BFa6GLMTSkZOhiD+MSWpzoIndwi6GLMDTkR6Hr3frwjT3BqHbdP9pEFzvzu+doobfCJ7/m0NVO5x41h94jZlLRqS51MMT1fX/18fl8Rq+/xETXtDPAbkutS8eh1ucQ6g19OHTonA/VqMvu+35ct5Hlo9aJHkLCHcT8QFhCVbuOhZ3BGHBtza7p4HoTOdHRQSbhb0343cusYZpD4CY61dQ9xfQuqXWNxlATnyv0MPu3CX22NpH9kVLVwTCEKmJnOVmqLnRqS3dciQNkrlPdpz1ohUxNmj8YUgwNMTTE0JDkC3/f93cPhG9vb9c3ouvCMAzf/q+EcUdyPp+T3oAi27v39/erj+eRQ6jnOYpUiu+j59Md+/XzO61WrtGQKkM/y5TGqDL0ERkaUjz0EZeJJcl3HeP+c8t+eo9T9xlCCOF3/yf6e3+df65+fgiv2TbvGS/44+mewcsZuvjS0QpDQwwNMTTE0BBDQwwNMTTE0BBDQwwNKf5SFulreLn6eHyCiuBEQ5oJPZ9mWjOhSzM0xNCQpkOT6/bht3elD4KjpieaZGhI06HJM8PDr9FkzDVNTzQpS+hn/OWZ3JKHNvKypL8CdYTIuX4tLNlEHyFyTknuvVojL50VbtmF5Jjqhy/wmSJPrQWvLnRtkWOe17g32alj716ja4ucWuqfL/rM8OiBp6Y/66MTHvXNtUfeunSkOC2PDb/pi2sPXEpM7NUvNPA2W4IbOqG14CufMPIet2I3HXrvmeM9S7EXt3ctRL5lGj/liwbfTlhajjz3NbwkexX924i3FHpPxK1TPl8+mn4p69R9Yq8pXoVuaZqniNhNT/Qee9fsS+hWpzmXeU8n+r/cy8cpBKd5lPPg6EQvyBH85DTnM23rRK/IegqudXvjH/63SR+VaqqdaIihIYaGGBpiaIihIW7v7kj1Hh9OdKSHn49WXobeYdeLuhlux6F4Cv5kDL1Biqk2NMTQEENnNr6cZWiIoSGGhhgaYmiIoTean7TEPt9haEAXPgZDQwwNMTTE0BBDQwwNMTTE0BBDb/To34QbGmJoiKF3in1l3NAQQ0NOud4vWdecaIihIYaGGBpiaIihIYaGGBpiaIihIYaGGBpiaIihIYaGGBpiaIihIYaGGBriu+1CnGiIoSGGhhgaYmiIoSGGhhgaYuidfHeDShkaYuiNHn03R0NDDA0xNMTQkM4n/hlONMTQEENDDA0xNMTQEENDDA0xNMTQEEMDhvDaGRpiaIihIYaGGBpiaIihIb7BIMSJhhgaYmiIoSGGhhgaYmiIoSGnEP49MV36hhydEw0xNOQS2uUjLycachXaqc5nMax/BZDOOLwuHRlNV4ibS4VT/Zj5Mry6Jht7n6Vj3d2Dn7G3W9tMRO8yDH9t604tyXauxfixW+Gs++Yj3AGpzi3+AhmGBZAYVByeAAAAAElFTkSuQmCC);
+            mask-size: contain;
+            mask-position: center;
+            background-image: linear-gradient(to top,rgb(242,140,24) var(--expbar-startpoint),#0000 var(--expbar-startpoint),#0000);
+            background-color: white;
+            padding: 0;
+            position: absolute;
+            right: 25%;
+            top: 50%;
+            transform: translate(50%, -50%);
+        }
+        #release {mask:none;background:none;color:white;font-weight: bold;}
+        #almond_water.shake {animation: shake .1s infinite;}
+        #almond_water .background {
+            width: 100%;
+            height: 100%;
+            background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFoAAADUCAYAAAAcEjSqAAAAAXNSR0IArs4c6QAAA/hJREFUeJzt3cF6ojAUQOHgN33/B3bBrOggE5BAcm6A82/banu4Bqo1HVKgYfgZyfsbx/dA3t/cK+qOnybsCKf0b6JbT9r8kRM11U405BGhI9fmSVho+kQY7RETPRd1gP9E3Olc7mF9NkYPS8XSLSc6d6Ci44dM9N6JLY3T87rf3USfiRU9tVtCQ0eFiZj87iZ60vN0HtFt6CO+Ter84NFT3VXonk9mZ+GhiZhby07UVHc10ZO7rc8pBYaOjBlx32jolg/Vo7dNLR9dLh3D8DOWBLjCSTQk9N6H7p7gy4/vvW16+cBC75m6cXwPa8/m5b7+aOQIyJNKpQ/tKdjy67Zup+fIKQUsHSVB1ib8zG1GafINrk1eb0HIV8e7vOqIUHqlU6rpGt3bBC+N43t49HU0ae954KzHh6YYGmJoiKEh1UNf4QmeLa0u85xoSLPQvV9DL7W+zHOiIYaGGBrS7LkO6v0pNRBXSk40pPpEr706cgVeddyAoSGGhhgaYmiIoSGGhhgaYmiIoSGGhhgaYmiIoSGGhhgaYmiIoSGGhhgaYmiIoSGGhhgaYmhIk9BX/Cul1nxrBaRq6Ctt65DTckiqhb565NaqxLhD5NY7HZye6DtEJpyKcrfILaf68ETfLfJS7RNjcZwedxuvqdXuOad3HL9T5MneHc2KbvPoHd8xcE6tnck2P/Eqm1CRjg5dUegnB547MoDrH+jgH3n1rmS6fZr0hNyOCGvTng3tNJfZ0+i/0D7Necy32JtLh9N8TG5YV0Mbua6P0C4b52wNp1cdkN/QXmnUtVwdnGjIKyWnuSZ/Mwz2cprbmbd1oiG/oZ3menItnWiIoSGGhhgaYmiIoSGGhhgaYmiIoSGGhhgaYmiIoSGGhhgaYujGppezDA0xdCPLl7MMDTE0xNAQQ0MMDRiGn9HQEEM3NL/EMzTE0BBDQwwNMTTE0BBDQwwNMTTE0JDsW5RVnxMNefm2N4YTDTE0xNAQQ0MMDTE0xNAQQ0MMDTE0xNAQQ0MMDTE0xNAQQ0MMDTE0xNAQQ0Ne/pkBw4mGuNsuxImGGBpiaIihIYaGGBpiaIihIYaGGBpiaIihIYaGGBpiaIihIYaGGBpiaIihIYaGGBpiaIihG/L/ggcwNGAc34OhIYaGGBpiaIihIW4wCHGiIW4wCHGiIYaGGBpiaIihIYaGfIT2l5Z2nGjIKyXfnkz4b6JdPtpw6YBkdzdwqutbnWhjn7Ps9xHak2IduSHNhp1/ovHLLCNP/b6eDF1C9luLnNLKRH/7In3KDeOy12a8rWl+evjSNl9jlSwdT4h/dPiKwxxZs694APb+nHt/tioBnnjCLB2eppN2hwNQ69H4FwLEi9Ynyj41AAAAAElFTkSuQmCC);
+        }
+
+        ::selection {
+            background: rgb(10,0,242);
+            color: white;
+        }
+
+        button {
+            color: rgb(10,0,242);
+            border: 0;
+            background: 0;
+            font-size: 1rem;
+            padding: 0;
+        }
+        button:hover {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        #inputCode:focus-visible {outline: 0;}
+        #inputCode {
+            font-size: 1rem;
+            border: 2px solid rgb(1,1,5);
+            border-left: 0;
+            border-bottom: 0;
+            margin: 0;
+            height: 100%;
+            background: none;
+            padding: 0;
+        }
+
+        .window {
+            width:100%;
+            height:100%;
+            position: absolute;
+            left:0;
+            top:0;
+            background:white;
+        }
+
+        #shopbutton {
+            width:fit-content;
+            margin: .5rem auto 0;
+        }
+
+        .closewindow {
+            background: white;
+            position:absolute;
+            right:0;
+            top: 0;
+            margin: .5rem;
+            border: 2px solid rgb(1,1,5);
+        }
+
+        #result {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            text-align: center;
+        }
+
+        .shopblock {
+            display: flex;
+            flex-wrap: wrap;
+            width: 250px;
+            justify-content: space-around;
+            align-items: flex-start;
+            margin: 2rem auto;
+            height: calc(300px - 5rem);
+            overflow: auto;
+            border: 2px solid rgb(1,1,5);
+        }
+
+        .shopblock>button {
+            width: 50%;
+            height: fit-content;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: .5rem 0;
+            position: relative;
+        }
+
+        .shopblock>button .icon {
+            width: 64px;
+            height: 64px;
+            background: black;
+            mask-position: center;
+            mask-size: 64px;
+        }
+
+        #shop_find .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAZxJREFUeJztmsESwiAMRGP//5/1IjMtCiUQdlPIOzojbF6D1RqRIAh25tXxnrfxelQ0gWuFj65NoyWktvDefSjcBbMoXrMfnFog7VnXyHIjohSkVExr8BYZLiS0XsmRsK7vGnkA6+Lv1rZcv4vz5jOLP4Pap4m0MTqUGwlH4fXZYUbvImaUBCBwIeFgbHqCfhf41wHsUNALwjwCCepR8CCASi6A3f5wogPYAb7QOs+LABohgB2ATQhgB2ATAtgB2IQAdgA2XgTQnkl4EZAD+2qcC2A+HaLgoQOo0tkC6I/H/wlAXREXx+0QX0+B4FnYRyDnLeDOYPw11logpBtSB6BaT3N1IZ1QOwLWAWp/j2sHNcxAzQdoZgOgt0bWhEjPcNYUCZrW0waYNWdkKqJnSmxktA4t8RbknGBv6KlDVk+ZFJ0mwXLub2T9VsyPhNWZHF3XIkPXnp5+CGkxEfFkASIGEp4uQGTwA3IFASL3n03FOlcRkFB3w2oCRJTdsKKARFM3rCwgURWxgwCRioRdBCR+ROwmQOQqYcf6gwsf2R5DUs8kiiEAAAAASUVORK5CYII=);
+        }
+
+        #jszbuff,
+        #shop_goldfinger .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAhVJREFUeJztmt2OxCAIhXWz7//K3asmHUeUn4NC1+9mJqlaOAWq1VIOh8PhH1N3GwDkGlwj/cwuwMjplq6vmQWQOH/z5e8PwJAdaJzv8osaaCGSXJ8KlS0Feg6NfJi2z5QCUudZZBEA5fxriiAsdTMIAKv4PaILYAl9lnDeAlxcQ5hYQr/b13MecDX/ewZQ4tTBNSgWRVsD6+CapA2FxFZ26mhSgArrq/ml+s7aeABbDa42/Iml+JF9uTVA6/h9Y878XbWeF9jQhZMCWsN2rDPED2oWAZxiZoEzjkvo34wiwOK8pdprUE+YqAhwWXkNxkOLxLaV+xqUOI8Ma047k3jR1wIaRJFqFcAzv92ffil7IsDz9SgeGy2A+KMksw2y3wdZawAs9awCVOK/Fe1YYmEQEVAL9rU2Y+akSATvFEBHCHeCxhZhRQ0YRYh1xlmbXzHRiqB0l2dEiI+iM7gpwokUVSrsFqAUWRF9AlmwRRBgBucbo7Z/CgGkLF0MeYOa8ZHjRBegBT7hyiYAfPmdTQALXfGiC+C2H3ATXYBSnPcXMghQCj1ZWnZGaOee4BPr6vLLD0qAyMfntFPnLllSQANrrfBWAVwPSETH5XxABlSbuW8QwHSwQpICUV6FT8ynSmaNRifBdsF5EGw7pQKYb6jEzQ6UABqQ91Y/gJ0CoDBF35I9eAdgKbdirw6FS53ZVdWjFNfDHz7VV4JZ8AqyAAAAAElFTkSuQmCC);
+        }
+
+        #shop_people .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAcdJREFUeJztm9sOwyAMQ+m0///l7qlSNQEjxXbM2vM0rVMgLuESslIe7s0mbGtPareLoiN743sLEd5E2y3HrWC9hV/OW7z9Ujgd6Tlv4/gBukOj8W4zLyAbrDlVsz86N0jEeBFtzzqwF8FEyhSgRVQYqgjMEEA7SgkJJwF6thA2q2SEwAhbmZtAh3EV4IC+ErgLUAM6ClYQgDoKVhCAClMA5voNs40UgDlr08IAPQIkSxcSRgi0RLAUgjnDjjgcaR+508Qa6RB9663+jB61w2QmRWeA9TsrLT4DtM8qASydpxisYOs8zeiJ1uSFXiEuo94Kt5xK2zuwBLiybEWWQBgMAWbW7J4IFCEUx+FoLPd+b58SQ874kpBACsDYrtJFcL4ZOtuhHbNRAiiOuhQRWCOAtYmBi4AQQJ3ogIqrygjZsmpafGt8DjNbJJWZ54OMNEVW2JpZAWBDMYuMTtsUSGU0alc/6JgUlYqQmRTdOs/Oz6lkJUVtCiddyuRS0mGl8AWIOJAigvpydLQ92l3gN8oQiDggqzNQpsWj/FWd4NXhSxdBdS8ww/Jlcup/pYRYJSGyTJWYEqu0uILl9wG3gnm3b1tz+LAiH+UXTGlB8aBlAAAAAElFTkSuQmCC);
+        }
+
+        #shop_people_upgrade .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAfNJREFUeJztmtuOwyAMRCer/v8vZ1+2VZpiAmbGmG6OVCmVEhsPdzBwc/Ov2QJ87MH+ulAXaL9+5Y1wgZQOe4M/EyKGyslo8E/kIigcsIJ/IhWBbdwKvsVPTTiZCEzDpQC89pm2qvwojP4xUuDSt+yuBYAngKJwIbOAqgVkn11eKLsAA3kryC4Aix1G61EJIBmwnOzGM4CyAKZaFdJtclo5C1BVawKKMrzZVI4BWabG6jdMAcIWL0zYLYApQoh4jwgn4ASzzF5ghRnhVSEjAuyn3xG2CKP2zO+9XaDUpM+Hn1vl3R5qwQ8fuB4/at2D9wR0VajelnPlu1Ws17u1LsAY0ZkjeYstq0ua9IwBs6Yzz9K82W9NgOjaU5ehyNUgyBahZ6AKWQgdW0D0/J1imZxp/c6aNrv89Uwb38T28eBgVYE284+YDIJ9xDtz48JcUbqJ2g63MKUyZh2LZ+gOAPLcC0zrilkEmMYtwOwCzCbjOiB0PIhylvaqLVue4JGl0+SAxHcBEQ68GV9hyVFK4yOpctb3S6TJAbzCh4mQNU9QYa8Iy6CqsHIRGCtBZSHTZ4mFj9qGTzejt8NnFMFLBVWnyKTHK0CaE51RWC1gydoHfAJ8Te0DnBawbO0D94nQLcAqAmzG8zCZboauSDXWePN20vELflFZWW60s2kAAAAASUVORK5CYII=);
+        }
+
+        #gnylbuff,
+        #shop_monster .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAo5JREFUeJztWtGSxCAIY2/2/39576k7nY5CAkG7d5vHtgKJqKg1++KLf43HZv+vQltJ7DsFqJC/Is1jlwBK8mfQfHYI0EX+AMXpDgKgMRztHgMbV8C8VgswCrwagydGaHulAKVAC/Zd26sEQMb9FhF+BE4jdKT9DDO70w7ozgCPfLcwkP1OAZAAFCJ4q0pov2sIoMRGz5g6YfTt+VkoZocAM/Iv5x1ioxrD8J1aAI/8+RukGFKtHO43SgHY8dwpwpZKMCKErtGyMhfxqRKgOrZZEVj703Zd1RcbXMdE6OHtrzoHdBYzS8r0ihOGPNL7yPqtyArJEFCRP9pVV5BZu9Du0zHEOM8KGZGcvZf5Y+cAZU8hNiopD7VlBFBPeFGqjvyjgsCxogJkyCuXsWspzaJ0INKx1KG97w2NWTtKoEiALHn1+R86R9DxegKsOMpSCpWKdyZAhbyCVGZvkPI1EqCr57O7Q8RmesK9ClAl37GBiYQqxRxNgiry6rMBLy4qW88C7L6xzZAvx+xlQFfqV1KW2uggOAToqrmzs3mGXGqinmVAx6yPfpe9UEmh62JEWTB13Ca9kTkP8AIx47a2ywqeGbIZoCxiPJttqX+AzYBsmRsFnk3r8lCrHogggUTkVt0XDoFmQDblVctZ2860sgooyKNHYaxvGMyG4jV5PoLq54j2MwlvLHbeGdyCvBl/IhTho8grHVe2t8juru2eEJlxFVdUs2+3kjfLH4t7z80+hLzZWIBqEcJWcNvIR07YXkPrAvmhRgXVYoapDVjbS6AqaljcgjzjdPsNTheUB5+7sqkERe+h9m5HPhsA/S/epM128mY9k9kKvzKoAmGF+HMCmNV/iNqCjmC2lrYsfgGKqbVjKLWOaQAAAABJRU5ErkJggg==);
+        }
+
+        #bzbuff,
+        #shop_bianzi .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAfJJREFUeJztW0luAzEMc4r+/8vppYeg8KKFpDSFCeSWkSWaliVlMsZFO7x/PxK8VAsZsAqa6mMXAk47TvPzi2X4KXgCAVSVdiBAlvBm6EDADvQc1Z0AOqoJKJX/GPUE7CC5olEESKs3JCoV0IKwzkdAgigBWcmXlb5/YSHgsefbAo8C/iUJFgI+5YggoRWRVgUo22Zpi464BVrtqBfIa7DLcMWFbnWAnMTv5PNe+TNrh0+YifQwvnPAYidS/GQIM8WGIAAdPDKpHn3LEhANHr3bO2x9zOQAVPDewFfrhgjMKOD0LDJ4mlKt1yAi2yuCd38/WgdknWIFv8JyPWs7DFnMaa/tTDCz+9bzyQh+SvyJAOTuR69RKrwKQCak8uDHwDZD3t1vAWY3mNl9VdMkaYctDtGvuxUq5gHWYCWt9o4A9bnNqCCsMo8CKrK2pahKHTHmEYgoyNMmQypK9lB05iRiMgQrp3dfQA5AvGt77ETth5xgZfCZ7SgBrlzFImD2LBuhJO3NAZTRdCVOBGSDUJJAmwky2lhEgoO8XB1Nap3knfKt22+DCEi6wU79fUqNHV+QkCJzBDqpIIxsN9iBhJQPEWmX/LdnAuk1aF08Y9Nqfwf32uwpjBKhWKorOhTCcZRNY0FI+49OXNLXWy4uLi6y+AGiEmJZSJ5RuQAAAABJRU5ErkJggg==);
+        }
+
+        #shop_dice .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAn5JREFUeJztWtFuxDAIa6f9/y93L7upywIxYNNtiqXqTtcLUAcoCTmOjY2NjY2N34Dr82rF2a3wBuRh5fY9QUB2liW2dhLAcm+qzR0EqOKaYruSgGqMo8SVnoFNgMpoGRlVAqLufdc3jkVsoROhmomVHkvOOdy37IvY4T5jhIDMw8/ke3LOyX1pnngDBdAYT4xbEfa6PJgyGHG3cm/EC7zcYMmwsCIMEhwSAoyr5pps8lySOQuB1YxnE+F1u1Y4je+zsdHJukJ/AICEQNWtZ3Ijskz978aNCAneA6MPeZcRJUZWCVZreDSxRbwDjX84cWcUZUPEkhkNj7t3lWsTNdOjDCs0FPo8O74wywFpYYdvYNT4lu2xqAegyS1Soqr3C1zvihCgXL1VMMtPcH6phMA1CnOUMYlAahfLth+/zQhQzFr2LSL3MmQ1eA6f4+9RIKs35D/HQZisaAhUqq4xPiu1BQ3ofkAVl/G9ivKeZhcBSszCBX69VgshBF3ujb6RvuE/eEAJHQQoeg+0TvJIgGq3x9rhieqcFTwlrDwg8y72SEDkKVeCP1ANgcfe3wvAdilygKrhWpELNUYYnR91u52uz6sDUOHdp0yo+iIh8MghJjUyvcF/RcKLAOZe3p+C5QHZLesoHie3YzEUgbVHIEu0lgdYu79dGZ9e8lpg9uU9RBoilSboTKY7Lnp2JwNFmw3RA40bQ8BbiGTcMNrP9yBp5M5ywEqRsiCydLMnZin4JZwhj3XcxZM5swNq46n33lc9RXZXOJyrWKevsnq6EiR30MH1iipkR2Si6C5rKbYrKzs2IRJbO0pbRe6goXs3p1rm0vGI0k+0rPY2Nnx8ACA2oFxuXMabAAAAAElFTkSuQmCC);
+        }
+
+        #shop_rich .icon {
+            mask-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAnJJREFUeJzlW9t2xCAIxJz+/y+nL+2exHhhYDDSztPuxoCOgAquyD9Hqb6fYPv0uA5oNnhEVhowCbDovOKcPGfgoQN1ARZmeiNIaOpAFDHJ0RDPJKHX9+JVYiGlpbPbQYN8rWwRkfJFUHATSJZ3OmVOJ+iIFE5CqB4PATV2WwZVxDEJiATDCpqxZ1cCkEDZgjqo7kAAsgJYLaHrnjsQUKN0Pv9iRgJE0o4E1PBawjA4ZyBAJHCFyUJAC5T9QSYCNK4Ak5KJABHcFabtsxHQgssVMhJADYjs0+BbMFtBRgsQ0VmBylKyEkBDZgIosSAzASOoyUGCIPUQ8gPvLBaj3g9aBKxKdbF0uUioXWDl4LfA2zGAlfSY5RBoHRiV0pjp6xXlMYoiVj3PSwDaj0/7Uv3g6YQHHgJc5Gkj6Eyo1m3qti2XQicFJeCmB11CmJlaq0xPZfnRFl0FzoYQNiI2XF1Z1mWwZ8YorPcTaPWBnr9pb44g5jZ7b+bzvefWGCAiuo1QGQhF40dPlibgRcQfOQAhSOe96BFOX5pbFjBTslsZ3AVLEGTPOCqPOgGMwxDbImj5Pg0s+4BdMArOangtIH08aBHQ2+3tNPs0jHKC1ytqb58WLVBN2CwpGnmB0Yte38JviOw8eBgoATsMnoqsxVFPIuf2HkqA9+4uE5qT7BQtAt76D8EKPMYSdRbwkLaScFVKjHEEHpnlqy6ltYBVeYDlQFzgzTpBGLyHIVZH0UJI6EaIkcy0tNHg7Hw245CAy4cGmS3Ugw1xC9ZO0GoFdVkbufr6J+4IWXdx9JQYesEgckVYmpW+uoAnFrD/ymKp+JjwDSbmf4uvc+9FAAAAAElFTkSuQmCC);
+        }
+
+        #introduce.hover {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 2px solid rgb(1,1,5);
+            padding: .1rem .5rem;
+            width: 80%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .8rem;
+            border-bottom: 0;
+            text-align: center;
+            max-height: 2rem;
+        }
+
+        .shopblock>button.cantbuy {pointer-events: none;}
+        .shopblock>button.cantbuy::after {
+            content: "没货了";
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            z-index: 10;
+            color: white;
+            background: rgb(1,1,5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .shopblock>button#shop_find.cantbuy::after,
+        .shopblock>button#shop_people_upgrade.cantbuy::after {content:"满级了"}
+        .shopblock>button.cantbuy.buffa::after {content: "暂时买不了哈"}
+        .shopblock>button#shop_rich.cantbuy::after {
+            content: "您真有钱";
+            color: rgb(1,1,5);
+            background-color: rgb(233,231,10);
+            animation: rich .2s infinite;
+        }
+
+        .shopblock>button.cantbuy.nomoney::after {
+            content: "穷b"!important;
+            color: white!important;
+            background: rgb(230,0,0)!important;
+            animation: none!important;
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        html, body {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .buff {
+            display: flex;
+            gap: 5px;
+        }
+
+        .buff>span {display: none}
+        .buff>span.open {
+            width: 32px;
+            height: 32px;
+            display: block;
+            background: black;
+            mask-size: contain;
+            mask-position: center;
+            background-image: linear-gradient(to bottom,rgba(255,255,255,.8) var(--startpoint),#0000 var(--startpoint),#0000);
+        }
+
+        @keyframes rich {
+            0% {
+                background-color: rgb(233,231,10);
+            }
+            50% {
+                background: rgb(242,140,24);
+            }
+            100% {
+                background-color: rgb(233,231,10);
+            }
+        }
+
+        span#almondnumber {
+            position: absolute;
+            left: 0;
+            top: 0;
+            border: 2px solid;
+            border-left: 0;
+            border-top: 0;
+            padding: .1rem .5rem;
+            font-size:.7rem
+        }
+
+        span#almondnumber:before {content:"杏仁水数量："}
+
+        #almond_water.full .background {
+            animation: rich .2s infinite;
+        }
+
+        #endwindow {
+            flex-direction: column;
+            justify-content: center;
+            gap: 1rem;
+        }
+        #endwindow>span {padding: 0 1rem;text-align: center;}
+
+        @keyframes shake {
+            0% {
+                right: 25%;
+                top: 50%;
+            }
+            25% {
+                right: 24%;
+                top: 51%;
+            }
+            50% {
+                right: 25%;
+                top: 52%;
+            }
+            75% {
+                right: 26%;
+                top: 49%;
+            }
+            100% {
+                right: 25%;
+                top: 50%;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="maincontent">
+        <button id="shopbutton" onclick="openShop()">商店</button>
+        <div class="shuzhi">
+            杏仁水：<span id="almondwaternumber"></span>
+            <br>
+            好基友：<span id="peoplenumber"></span>
+            <br>
+            手动搜索速度：<span id="clickspeed"></span>
+            <br>
+            自动搜索速度：<span id="peoplespeed"></span>
+            <br>
+            <div class="buff">
+                <span id="jszbuff"></span>
+                <span id="gnylbuff"></span>
+                <span id="bzbuff"></span>
+            </div>
+        </div>
+
+        <div>
+            <input type="text" id="inputCode" placeholder="一个神秘的输入框"> <button onclick="executeCode()">确定</button>
+        </div>
+
+        <button id="almond_water" onclick="almondWaterEvent()"><div class="background"></div></button>
+        <button id="release" style="display: none;" onclick="release()">释放</button>
+        <div id="shopwindow" class="window" style="display: none;">
+            <button class="closewindow" onclick="closeWindow()">关闭</button>
+            <div class="shopblock">
+                <span id="almondnumber"></span>
+                <button id="shop_find" onclick="shopbuy(1)" onmouseover="openintroduce('觉得自己找的杏仁水太少？升个级。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>杏仁水寻找升级</span>
+                <span>等级：<span id="find_level"></span></span>
+                <span>价格：<span id="find_price"></span></span>
+                </button>
+
+                <button id="shop_goldfinger" onclick="shopbuy(2)" onmouseover="openintroduce('1分钟内寻找杏仁水数量x2。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>金手指</span>
+                <span>库存：<span id="finger_level"></span></span>
+                <span>价格：<span id="finger_price"></span></span>
+                </button>
+
+                <button id="shop_people" onclick="shopbuy(3)" onmouseover="openintroduce('自己一个人找太慢？雇个好基友呗。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>买点人</span>
+                <span>库存：<span id="people_count"></span></span>
+                <span>价格：<span id="people_price"></span></span>
+                </button>
+
+                <button id="shop_people_upgrade" onclick="shopbuy(4)" onmouseover="openintroduce('什么？好基友找的也慢？那给他也升个级。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>人升级</span>
+                <span>等级：<span id="people_level"></span></span>
+                <span>价格：<span id="people_upgrade_price"></span></span>
+                </button>
+
+                <button id="shop_monster" onclick="shopbuy(5)" onmouseover="openintroduce('喂好基友点能量饮料，5分钟内寻找数量x1.5。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>功能饮料</span>
+                <span>库存：<span id="monster_count"></span></span>
+                <span>价格：<span id="monster_price"></span></span>
+                </button>
+
+                <button id="shop_bianzi" onclick="shopbuy(6)" onmouseover="openintroduce('觉得他们干活太慢？抽两鞭子就行了，2分钟内寻找数量x2。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>鞭子</span>
+                <span>库存：<span id="whip_count"></span></span>
+                <span>价格：<span id="whip_price"></span></span>
+                </button>
+
+                <button id="shop_dice" onclick="shopbuy(7)" onmouseover="openintroduce('想不想体验一下赌神的感觉？购买后杏仁水数量x[0.5,1.5]。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>赌狗骰子</span>
+                <span>库存：<span id="dice_count"></span></span>
+                <span>价格：<span id="dice_price"></span></span>
+                </button>
+
+                <button id="shop_rich" onclick="shopbuy(8)" onmouseover="openintroduce('没别的，只能说买了之后可以显得你很有钱。')" onmouseout="closeintroduce()">
+                <div class="icon"></div>
+                <span>富有的象征</span>
+                <span>库存：<span id="rich_count"></span></span>
+                <span>价格：<span id="rich_price"></span></span>
+                </button>
+            </div>
+            <span id="introduce"></span>
+        </div>
+        <div id="warnwindow" class="window" style="display: none;">
+            <button class="closewindow" onclick="closeWindow()">关闭</button>
+            <span id="result" class="hover"></span>
+        </div>
+        <div id="endwindow" class="window" style="display: none">
+            
+            <span id="end1" style="display: none">Boom！瓶子爆炸了，里面炸出来了一张纸条，上面写着：</span>
+            <span id="end2" style="display: none">(((((96 * 89 + 77) * 93 - 85) + 49) * 4) * 97) - 73</span>
+        </div>
+    </div>
+  <script>
+	const SECRET_KEY = 'MY_SECRET_KEY';
+	const USED_CODES_KEY = 'used_codes';
+
+    const need_almond_water = 166666666;
+    
+    function loadVariable(key, defaultValue) {
+        const value = localStorage.getItem(key);
+        return value !== null ? JSON.parse(value) : defaultValue;
+    }
+
+    function saveVariable(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function release() {
+        document.getElementById('endwindow').style = "display: flex;"
+        setTimeout(() => {
+            document.getElementById('end1').style = "display: block;";
+        }, 500);
+        setTimeout(() => {
+            document.getElementById('end2').style = "display: block;";
+            gameState.end = true;
+        }, 1500);
+    }
+
+    const variables = {
+        almond_water: 0,
+        almond_water_click_level: 1,
+        almond_water_click_upgrade_price: 10,
+        buy_goldfinger: 0,
+        goldfinger: false,
+        goldfinger_price: 5000,
+        goldfinger_time: 0,
+        people: 0,
+        people_price: 20,
+        people_level: 1,
+        people_upgrade_price: 50,
+        buy_whip: 0,
+        whip: false,
+        whip_price: 20000,
+        whip_time: 0,
+        buy_monster: 0,
+        monster: false,
+        monster_price: 50000,
+        monster_time: 0,
+        buy_dice: 0,
+        dice_price: 1000000,
+        buy_rich: 0,
+        rich_price: 88888888,
+        initial: false,
+        big_baodi: 0,
+        end: false
+    };
+
+    const gameState = {};
+    for (const [key, defaultValue] of Object.entries(variables)) {
+        Object.defineProperty(gameState, key, {
+            get: () => loadVariable(key, defaultValue),
+            set: (value) => saveVariable(key, value)
+        });
+    }
+
+    const max_find_level = 200;
+    const max_goldfinger = 10;
+    const max_people = 1000;
+    const max_people_level = 50;
+    const max_whip = 5;
+    const max_monster = 20;
+    const max_dice = 6;
+    const max_rich = 1;
+    let people_speed = 0;
+
+    if (gameState.initial == false) {
+        initial();
+        gameState.initial = true;
+
+        document.getElementById('warnwindow').style = "display: block;"
+        document.getElementById('result').innerText = '欢迎游玩这个杏仁水游戏，你的任务目标就是灌满杏仁水瓶，点那个杏仁水瓶就能收集，嗯没了。';
+    }
+
+    function update(){
+        document.getElementById('almond_water').style.setProperty('--expbar-startpoint', (gameState.almond_water / need_almond_water) * 100 + '%');
+        document.getElementById('jszbuff').style.setProperty('--startpoint', 100 - (gameState.goldfinger_time / 60000) * 100 + '%');
+        document.getElementById('bzbuff').style.setProperty('--startpoint', 100 - (gameState.whip_time / 120000) * 100 + '%');
+        document.getElementById('gnylbuff').style.setProperty('--startpoint', 100 - (gameState.monster_time / 300000) * 100 + '%');
+        people_speed = gameState.people *(1 + Math.pow((gameState.people_level - 1), 2) / 5);
+        updateDisplay();
+        cantbuy();
+        buff();
+
+        if (gameState.almond_water >= need_almond_water) document.getElementById('almond_water').className = "full";
+    }
+
+    function buff(){
+        if (gameState.goldfinger == true && gameState.goldfinger_time > 0) {
+            gameState.goldfinger_time --;
+            document.getElementById('jszbuff').className = "open";
+            document.getElementById('shop_goldfinger').className = "cantbuy buffa";
+        }
+        else if (gameState.goldfinger == true){
+            gameState.goldfinger = false;
+            document.getElementById('jszbuff').className = "";
+            document.getElementById('shop_goldfinger').className = "";
+        }
+
+        if (gameState.whip == true && gameState.whip_time > 0) {
+            gameState.whip_time --;
+            document.getElementById('bzbuff').className = "open";
+            document.getElementById('shop_bianzi').className = "cantbuy buffa";
+        }
+        else if (gameState.whip == true){
+            gameState.whip = false;
+            document.getElementById('bzbuff').className = "";
+            document.getElementById('shop_bianzi').className = "";
+        }
+
+        if (gameState.monster == true && gameState.monster_time > 0) {
+            gameState.monster_time --;
+            document.getElementById('gnylbuff').className = "open";
+            document.getElementById('shop_monster').className = "cantbuy buffa";
+        }
+        else if (gameState.monster == true){
+            gameState.monster = false;
+            document.getElementById('gnylbuff').className = "";
+            document.getElementById('shop_monster').className = "";
+        }
+    }
+
+    function initial() {
+        for (const [key, defaultValue] of Object.entries(variables)) {
+            if (key !== 'initial') {
+                gameState[key] = defaultValue;
+            }
+        }
+    }
+
+    if (gameState.end) {
+        document.getElementById('endwindow').style = "display: flex;"
+        document.getElementById('end2').style = "display: block;";
+    }
+
+    function cantbuy() {
+        if ((max_find_level - gameState.almond_water_click_level) <= 0) document.getElementById('shop_find').className = "cantbuy";
+        if ((max_goldfinger - gameState.buy_goldfinger) <= 0) document.getElementById('shop_goldfinger').className = "cantbuy";
+        if ((max_people - gameState.people) <= 0) document.getElementById('shop_people').className = "cantbuy";
+        if ((max_people_level - gameState.people_level) <= 0) document.getElementById('shop_people_upgrade').className = "cantbuy";
+        if ((max_whip - gameState.buy_whip) <= 0) document.getElementById('shop_bianzi').className = "cantbuy";
+        if ((max_monster - gameState.buy_monster) <= 0) document.getElementById('shop_monster').className = "cantbuy";
+        if ((max_dice - gameState.buy_dice) <= 0) document.getElementById('shop_dice').className = "cantbuy";
+        if ((max_rich - gameState.buy_rich) <= 0) document.getElementById('shop_rich').className = "cantbuy";
+    }
+
+    function shopbuy(number) {
+        if (number == 1) {
+            if (gameState.almond_water_click_upgrade_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.almond_water_click_upgrade_price;
+                gameState.almond_water_click_level ++;
+                gameState.almond_water_click_upgrade_price += Math.pow(gameState.almond_water_click_level, 3) / Math.pow(gameState.almond_water_click_level, 1.25) * Math.pow(gameState.almond_water_click_level, 0.25) * 20;
+            }
+            else {
+                document.getElementById('shop_find').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_find').className = "";
+                }, 500);
+            }
+        }
+        if (number == 2) {
+            if (gameState.goldfinger_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.goldfinger_price;
+                gameState.buy_goldfinger ++;
+                gameState.goldfinger_price *= 2.85;
+                gameState.goldfinger = true;
+                gameState.goldfinger_time = 60000;
+            }
+            else {
+                document.getElementById('shop_goldfinger').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_goldfinger').className = "";
+                }, 500);
+            }
+            
+        }
+        if (number == 3) {
+            if (gameState.people_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.people_price;
+                gameState.people ++;
+                gameState.people_price += Math.pow(gameState.people + 1, 1.2) / Math.pow(gameState.people + 1, -0.25) * 10;
+            }
+            else {
+                document.getElementById('shop_people').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_people').className = "";
+                }, 500);
+            }
+            
+        }
+        if (number == 4) {
+            if (gameState.people_upgrade_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.people_upgrade_price;
+                gameState.people_level ++;
+                gameState.people_upgrade_price += Math.pow(gameState.people_level, 3.1) * 40;
+            }
+            else {
+                document.getElementById('shop_people_upgrade').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_people_upgrade').className = "";
+                }, 500);
+            }
+            
+        }
+        if (number == 5) {
+            if (gameState.monster_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.monster_price;
+                gameState.buy_monster ++;
+                gameState.monster_price *= 1.45;
+                gameState.monster = true;
+                gameState.monster_time = 300000;
+            }
+            else {
+                document.getElementById('shop_monster').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_monster').className = "";
+                }, 500);
+            }
+            
+        }
+        if (number == 6) {
+            if (gameState.whip_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.whip_price;
+                gameState.buy_whip ++;
+                gameState.whip_price *= 7.5;
+                gameState.whip = true;
+                gameState.whip_time = 120000;
+            }
+            else {
+                document.getElementById('shop_bianzi').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_bianzi').className = "";
+                }, 500);
+            }
+            
+        }
+        if (number == 7) {
+            if (gameState.dice_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.dice_price;
+                gameState.buy_dice ++;
+                gameState.dice_price *= 2;
+                gameState.almond_water = randomMultiplyInRange(gameState.almond_water, 0.5, 1.5)
+            }
+            else {
+                document.getElementById('shop_dice').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_dice').className = "";
+                }, 500);
+            }
+            
+        }
+        if (number == 8) {
+            if (gameState.rich_price <= gameState.almond_water) {
+                gameState.almond_water -= gameState.rich_price;
+                gameState.buy_rich ++;
+            }
+            else {
+                document.getElementById('shop_rich').className = "cantbuy nomoney";
+                setTimeout(() => {
+                    document.getElementById('shop_rich').className = "";
+                }, 500);
+            }
+            
+        }
+    }
+
+    function updateDisplay() {
+        document.getElementById('almondnumber').innerText = (gameState.almond_water).toFixed(2);
+
+        if (gameState.almond_water >= need_almond_water) document.getElementById('release').style = "display:block";
+
+        if (gameState.almond_water >= need_almond_water) document.getElementById('almondwaternumber').innerText = "满了！！！";
+        else document.getElementById('almondwaternumber').innerText = (gameState.almond_water).toFixed(2) + "/" + need_almond_water;
+
+        document.getElementById('peoplenumber').innerText = gameState.people;
+
+        if (gameState.goldfinger) document.getElementById('clickspeed').innerText = (Math.pow((gameState.almond_water_click_level), 1.7) * 2).toFixed(2) + "/下";
+        else document.getElementById('clickspeed').innerText = Math.pow((gameState.almond_water_click_level), 1.7).toFixed(2) + "/下";
+        
+        if (gameState.whip && gameState.monster) document.getElementById('peoplespeed').innerText = (people_speed * 1.5 * 2).toFixed(2) + "/s";
+        else if (gameState.whip) document.getElementById('peoplespeed').innerText = (people_speed * 2).toFixed(2) + "/s";
+        else if (gameState.monster) document.getElementById('peoplespeed').innerText = (people_speed * 1.5).toFixed(2) + "/s";
+        else document.getElementById('peoplespeed').innerText = (people_speed).toFixed(2) + "/s";
+        
+        document.getElementById('find_level').innerText = gameState.almond_water_click_level;
+        document.getElementById('find_price').innerText = gameState.almond_water_click_upgrade_price.toFixed(0);
+        
+        document.getElementById('finger_level').innerText = (max_goldfinger - gameState.buy_goldfinger);
+        document.getElementById('finger_price').innerText = gameState.goldfinger_price.toFixed(0);
+        
+        document.getElementById('people_count').innerText = (max_people - gameState.people);
+        document.getElementById('people_price').innerText = gameState.people_price.toFixed(0);
+        
+        document.getElementById('people_level').innerText = gameState.people_level;
+        document.getElementById('people_upgrade_price').innerText = gameState.people_upgrade_price.toFixed(0);
+        
+        document.getElementById('monster_count').innerText = (max_monster - gameState.buy_monster);
+        document.getElementById('monster_price').innerText = gameState.monster_price.toFixed(0);
+        
+        document.getElementById('whip_count').innerText = (max_whip - gameState.buy_whip);
+        document.getElementById('whip_price').innerText = gameState.whip_price.toFixed(0);
+        
+        document.getElementById('dice_count').innerText = (max_dice - gameState.buy_dice);
+        document.getElementById('dice_price').innerText = gameState.dice_price.toFixed(0);
+        
+        document.getElementById('rich_count').innerText = (max_rich - gameState.buy_rich);
+        document.getElementById('rich_price').innerText = gameState.rich_price.toFixed(0);
+    }
+
+    setInterval(update, 0);
+    setInterval(get_almondwater, 10);
+
+    function get_almondwater(){
+        if (people_speed * 10 > 0) {
+            if (gameState.whip && gameState.monster) gameState.almond_water += (people_speed / 100) * 1.5 * 2;
+            else if (gameState.whip) gameState.almond_water += (people_speed / 100) * 2;
+            else if (gameState.monster) gameState.almond_water += (people_speed / 100) * 1.5;
+            else gameState.almond_water += (people_speed / 100);
+        }
+            
+    }
+
+    function openintroduce(content) {
+        document.getElementById('introduce').className = "hover";
+        document.getElementById('introduce').innerText = content;
+    }
+
+    function closeintroduce(content) {
+        document.getElementById('introduce').className = "";
+        document.getElementById('introduce').innerText = "";
+    }
+
+    function openShop() {
+        document.getElementById('shopwindow').style = "display: block;"
+    }
+
+    function closeWindow() {
+        document.getElementById('warnwindow').style = "display: none;"
+        document.getElementById('shopwindow').style = "display: none;"
+    }
+
+    function almondWaterEvent() {
+        const button = document.getElementById('almond_water');
+        button.classList.add('shake');
+        setTimeout(() => {
+            button.classList.remove('shake');
+        }, 100);
+
+        if (gameState.goldfinger) gameState.almond_water += Math.pow((gameState.almond_water_click_level), 1.7) * 2;
+        else gameState.almond_water += Math.pow((gameState.almond_water_click_level), 1.7);
+
+        gameState.big_baodi ++;
+        const randomNum = Math.floor(Math.random() * 5000) + 1;
+        if (randomNum === 1 || gameState.big_baodi >= 10000) {
+            generateCode();
+            gameState.big_baodi = 0;
+        }
+    }
+  
+	function simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+        }
+        return hash.toString(36).toUpperCase().slice(0, 10);
+	}
+  
+	function getCurrentTimestamp() {
+	    return Math.floor(Date.now() / 1000);
+	}
+  
+	function generateCode() {
+	    const timestamp = getCurrentTimestamp();
+	    const raw = timestamp + SECRET_KEY;
+	    const code = simpleHash(raw);
+        document.getElementById('warnwindow').style = "display: block;"
+  
+        saveUsedCode(code);
+        document.getElementById('result').innerText = `恭喜你获得神秘代码：${code}，当然吼你是用不了的，不如让别人试试？`;
+	}
+  
+	function getUsedCodes() {
+        const data = localStorage.getItem(USED_CODES_KEY);
+        return data ? JSON.parse(data) : [];
+	}
+  
+	function saveUsedCode(code) {
+        const codes = getUsedCodes();
+        codes.push(code);
+        localStorage.setItem(USED_CODES_KEY, JSON.stringify(codes));
+	}
+  
+	function isValidCode(code) {
+        const now = getCurrentTimestamp();
+        for (let i = 0; i < 86400; i++) {
+            const raw = (now - i) + SECRET_KEY;
+            if (simpleHash(raw) === code) {
+            return true;
+            }
+        }
+        return false;
+	}
+
+    function randomMultiplyInRange(value, minMultiplier, maxMultiplier) {
+        const multiplier = minMultiplier + Math.random() * (maxMultiplier - minMultiplier);
+        return value * multiplier;
+    }
+  
+	function executeCode() {
+	    const input = document.getElementById('inputCode').value.trim();
+	    const usedCodes = getUsedCodes();
+        document.getElementById('warnwindow').style = "display: block;"
+  
+        if (usedCodes.includes(input)) {
+            document.getElementById('result').innerText = '我跟你说吼，这个码用不了了你气不气。';
+        } else if (isValidCode(input)) {
+            document.getElementById('result').innerText = `哇塞，居然是能用的码，那我不得不奖励你了。`;
+            saveUsedCode(input);
+            gameState.almond_water += randomMultiplyInRange(gameState.almond_water, 0.1, 0.5)
+        } else if (input == "") {
+            document.getElementById('result').innerText = `一点东西不往里输直接糊弄我是吧。`;
+        } else {
+            document.getElementById('result').innerText = '？你在往里输什么。';
+        }
+	}
+  </script>
+  
+</body>
+</html>
